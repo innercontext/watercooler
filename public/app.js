@@ -9,7 +9,7 @@ let config = { user: '', mailbox: '', avatar: null };
 let messages = []; // Messages TO user (for main panel)
 let allMessages = []; // All messages involving user (for desk dialogs)
 let recipients = [];
-let avatarStates = {}; // Map of name -> {tool_name, timestamp}
+let statusStates = {}; // Map of name -> {tool_name, timestamp}
 let scene, camera, renderer, controls;
 let agentMeshes = new Map();
 let connectionLines = [];
@@ -980,13 +980,8 @@ function updateVillage() {
     clearConnections();
     
     // Use recipients (from coworkers.db) as the authoritative list of agents
+    // Only show people in the coworker list, not random message senders
     const allAgents = new Set([config.user.toLowerCase(), ...recipients.map(r => r.toLowerCase())]);
-    
-    // Also add message participants
-    messages.forEach(m => {
-        allAgents.add(m.sender.toLowerCase());
-        allAgents.add(m.recipient.toLowerCase());
-    });
     
     // Arrange agents in a circle on the platform
     const agents = Array.from(allAgents);
@@ -998,8 +993,8 @@ function updateVillage() {
         const z = Math.sin(angle) * radius;
         const position = new THREE.Vector3(x, 0, z);
         
-        const avatarState = avatarStates[agent.toLowerCase()];
-        const toolName = avatarState?.tool_name || null;
+        const statusState = statusStates[agent.toLowerCase()];
+        const toolName = statusState?.tool_name || null;
         
         if (!agentMeshes.has(agent)) {
             const group = createAgentDesk(agent, position, toolName);
@@ -1163,14 +1158,14 @@ async function loadData() {
         recipients = Array.isArray(recipientsData) ? recipientsData : [];
         allMessages = Array.isArray(allMessagesData) ? allMessagesData : [];
         
-        // Load avatar states if avatar DB is configured
-        if (config.avatar) {
+        // Load status states if status DB is configured
+        if (config.status) {
             try {
-                const avatarsRes = await fetch('/api/avatars');
-                avatarStates = await avatarsRes.json();
+                const statusRes = await fetch('/api/status');
+                statusStates = await statusRes.json();
             } catch (err) {
-                console.error('Error loading avatar states:', err);
-                avatarStates = {};
+                console.error('Error loading status states:', err);
+                statusStates = {};
             }
         }
         
@@ -1537,8 +1532,8 @@ function updateDeskLabels() {
             !m.read
         ).length;
         
-        const avatarState = avatarStates[name.toLowerCase()];
-        const toolName = avatarState?.tool_name || null;
+        const statusState = statusStates[name.toLowerCase()];
+        const toolName = statusState?.tool_name || null;
         
         const sprite = group.children.find(c => c.isSprite);
         if (sprite) {

@@ -13,7 +13,7 @@ const args = process.argv.slice(2);
 let user: string | null = null;
 let mailboxPath: string | null = null;
 let coworkerPath: string | null = null;
-let avatarPath: string | null = null;
+let statusPath: string | null = null;
 let port: number = parseInt(process.env.PORT || '3000', 10);
 let host: string = process.env.HOST || '0.0.0.0';
 
@@ -24,8 +24,8 @@ for (let i = 0; i < args.length; i++) {
     mailboxPath = args[++i];
   } else if (args[i] === '--coworkers' || args[i] === '-c') {
     coworkerPath = args[++i];
-  } else if (args[i] === '--avatars' || args[i] === '-a') {
-    avatarPath = args[++i];
+  } else if (args[i] === '--status' || args[i] === '-s') {
+    statusPath = args[++i];
   } else if (args[i] === '--port' || args[i] === '-p') {
     const p = parseInt(args[++i], 10);
     if (!isNaN(p)) port = p;
@@ -35,7 +35,7 @@ for (let i = 0; i < args.length; i++) {
 }
 
 if (!user || !mailboxPath) {
-  console.error('Usage: watercooler --user <name> --mailbox <path> [--coworkers <path>] [--avatars <path>] [--port <number>] [--host <address>]');
+  console.error('Usage: watercooler --user <name> --mailbox <path> [--coworkers <path>] [--status <path>] [--port <number>] [--host <address>]');
   process.exit(1);
 }
 
@@ -44,15 +44,15 @@ console.log(`   Mailbox: ${mailboxPath}`);
 if (coworkerPath) {
   console.log(`   Coworker DB: ${coworkerPath}`);
 }
-if (avatarPath) {
-  console.log(`   Avatar DB: ${avatarPath}`);
+if (statusPath) {
+  console.log(`   Status DB: ${statusPath}`);
 }
 console.log(`   URL: http://${host}:${port}`);
 
 // Databases
 let db: Database.Database | null = null;
 let coworkerDb: Database.Database | null = null;
-let avatarDb: Database.Database | null = null;
+let statusDb: Database.Database | null = null;
 
 try {
   db = new Database(mailboxPath);
@@ -71,12 +71,12 @@ if (coworkerPath) {
   }
 }
 
-if (avatarPath) {
+if (statusPath) {
   try {
-    avatarDb = new Database(avatarPath);
-    console.log('   Avatar DB: connected');
+    statusDb = new Database(statusPath);
+    console.log('   Status DB: connected');
   } catch (err: any) {
-    console.warn('   Avatar DB error:', err.message);
+    console.warn('   Status DB error:', err.message);
   }
 }
 
@@ -247,16 +247,16 @@ app.post('/api/messages/:id/read', (req, res) => {
   }
 });
 
-// API: Get avatar states (latest tool usage per coworker)
-app.get('/api/avatars', (req, res) => {
+// API: Get status states (latest tool usage per coworker)
+app.get('/api/status', (req, res) => {
   try {
-    if (!avatarDb) {
+    if (!statusDb) {
       res.json({});
       return;
     }
     
     // Check if latest_tool_usage table exists
-    const tableCheck = avatarDb.prepare(`
+    const tableCheck = statusDb.prepare(`
       SELECT name FROM sqlite_master 
       WHERE type='table' AND name='latest_tool_usage'
     `).get();
@@ -267,7 +267,7 @@ app.get('/api/avatars', (req, res) => {
     }
     
     // Get latest tool usage per name
-    const stmt = avatarDb.prepare(`
+    const stmt = statusDb.prepare(`
       SELECT name, tool_name, timestamp
       FROM latest_tool_usage
       ORDER BY timestamp DESC
@@ -276,26 +276,26 @@ app.get('/api/avatars', (req, res) => {
     const rows = stmt.all() as Array<{name: string; tool_name: string; timestamp: number}>;
     
     // Build map of name -> latest tool (first occurrence is latest due to ORDER BY)
-    const avatarStates: Record<string, {tool_name: string; timestamp: number}> = {};
+    const statusStates: Record<string, {tool_name: string; timestamp: number}> = {};
     for (const row of rows) {
-      if (!avatarStates[row.name]) {
-        avatarStates[row.name] = {
+      if (!statusStates[row.name]) {
+        statusStates[row.name] = {
           tool_name: row.tool_name,
           timestamp: row.timestamp
         };
       }
     }
     
-    res.json(avatarStates);
+    res.json(statusStates);
   } catch (err: any) {
-    console.error('Error in /api/avatars:', err.message);
+    console.error('Error in /api/status:', err.message);
     res.status(500).json({ error: err.message });
   }
 });
 
 // Config endpoint
 app.get('/api/config', (req, res) => {
-  res.json({ user, mailbox: mailboxPath, coworker: coworkerPath, avatar: avatarPath });
+  res.json({ user, mailbox: mailboxPath, coworker: coworkerPath, status: statusPath });
 });
 
 app.listen(port, host, () => {
