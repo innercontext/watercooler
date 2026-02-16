@@ -47,6 +47,13 @@ function init() {
     controls.maxPolarAngle = Math.PI / 2 - 0.1;
     controls.minDistance = 20;
     controls.maxDistance = 80;
+    controls.enableZoom = true;
+    controls.zoomSpeed = 0.8;
+    controls.enablePan = false; // Disable pan on touch for better mobile UX
+    controls.touches = {
+        ONE: THREE.TOUCH.ROTATE,
+        TWO: THREE.TOUCH.DOLLY_PAN
+    };
     
     // Lighting
     const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
@@ -89,6 +96,18 @@ function init() {
     raycaster = new THREE.Raycaster();
     mouse = new THREE.Vector2();
     renderer.domElement.addEventListener('click', onHouseClick);
+    
+    // Add touch support for mobile
+    renderer.domElement.addEventListener('touchstart', onHouseTouchStart, { passive: false });
+    renderer.domElement.addEventListener('touchend', onHouseTouchEnd, { passive: false });
+    
+    // Disable context menu on mobile for better UX
+    renderer.domElement.addEventListener('contextmenu', (e) => e.preventDefault());
+    
+    // Handle orientation change
+    window.addEventListener('orientationchange', () => {
+        setTimeout(onWindowResize, 100);
+    });
     
     animate();
 }
@@ -354,9 +373,21 @@ function animate() {
 }
 
 function onWindowResize() {
-    camera.aspect = window.innerWidth / window.innerHeight;
+    const width = window.innerWidth;
+    const height = window.innerHeight;
+    camera.aspect = width / height;
     camera.updateProjectionMatrix();
-    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setSize(width, height);
+    
+    // Adjust camera position for better mobile view
+    if (width < 768) {
+        // On mobile, position camera slightly higher and further back
+        camera.position.y = Math.max(camera.position.y, 35);
+        camera.position.z = Math.max(camera.position.z, 45);
+        controls.minDistance = 30; // Prevent zooming too close on mobile
+    } else {
+        controls.minDistance = 20;
+    }
 }
 
 // API and UI Functions
@@ -529,9 +560,47 @@ async function sendMessage() {
 
 // House click handler
 function onHouseClick(event) {
-    // Calculate mouse position
-    mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
-    mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+    handleHouseInteraction(event.clientX, event.clientY);
+}
+
+// Touch handlers for mobile
+let touchStartX = 0;
+let touchStartY = 0;
+
+function onHouseTouchStart(event) {
+    if (event.touches.length === 1) {
+        touchStartX = event.touches[0].clientX;
+        touchStartY = event.touches[0].clientY;
+    }
+}
+
+function onHouseTouchEnd(event) {
+    if (event.changedTouches.length === 1) {
+        const touchEndX = event.changedTouches[0].clientX;
+        const touchEndY = event.changedTouches[0].clientY;
+        
+        // Check if touch moved significantly (if so, it's a drag/pan, not a tap)
+        const moveDistance = Math.sqrt(
+            Math.pow(touchEndX - touchStartX, 2) + 
+            Math.pow(touchEndY - touchStartY, 2)
+        );
+        
+        // Only trigger if touch didn't move much (tap vs swipe)
+        if (moveDistance < 20) {
+            handleHouseInteraction(touchEndX, touchEndY);
+        }
+    }
+}
+
+// Common house interaction handler
+function handleHouseInteraction(clientX, clientY) {
+    // Calculate normalized device coordinates
+    const rect = renderer.domElement.getBoundingClientRect();
+    const x = ((clientX - rect.left) / rect.width) * 2 - 1;
+    const y = -((clientY - rect.top) / rect.height) * 2 + 1;
+    
+    mouse.x = x;
+    mouse.y = y;
     
     raycaster.setFromCamera(mouse, camera);
     

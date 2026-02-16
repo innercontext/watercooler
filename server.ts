@@ -7,13 +7,14 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
-const PORT = process.env.PORT || 3000;
 
 // Parse CLI args
 const args = process.argv.slice(2);
 let user: string | null = null;
 let mailboxPath: string | null = null;
 let coworkerPath: string | null = null;
+let port: number = parseInt(process.env.PORT || '3000', 10);
+let host: string = process.env.HOST || '0.0.0.0';
 
 for (let i = 0; i < args.length; i++) {
   if (args[i] === '--user' || args[i] === '-u') {
@@ -22,11 +23,16 @@ for (let i = 0; i < args.length; i++) {
     mailboxPath = args[++i];
   } else if (args[i] === '--coworkers' || args[i] === '-c') {
     coworkerPath = args[++i];
+  } else if (args[i] === '--port' || args[i] === '-p') {
+    const p = parseInt(args[++i], 10);
+    if (!isNaN(p)) port = p;
+  } else if (args[i] === '--host' || args[i] === '-h') {
+    host = args[++i];
   }
 }
 
 if (!user || !mailboxPath) {
-  console.error('Usage: watercooler --user <name> --mailbox <path> [--coworkers <path>]');
+  console.error('Usage: watercooler --user <name> --mailbox <path> [--coworkers <path>] [--port <number>] [--host <address>]');
   process.exit(1);
 }
 
@@ -35,7 +41,7 @@ console.log(`   Mailbox: ${mailboxPath}`);
 if (coworkerPath) {
   console.log(`   Coworker DB: ${coworkerPath}`);
 }
-console.log(`   URL: http://localhost:${PORT}`);
+console.log(`   URL: http://${host}:${port}`);
 
 // Databases
 let db: Database.Database | null = null;
@@ -230,6 +236,6 @@ app.get('/api/config', (req, res) => {
   res.json({ user, mailbox: mailboxPath, coworker: coworkerPath });
 });
 
-app.listen(PORT, () => {
+app.listen(port, host, () => {
   console.log('\n✅ Watercooler running!');
 });

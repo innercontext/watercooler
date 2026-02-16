@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <title>Watercooler</title>
     <style>
         * { 
@@ -382,6 +382,223 @@
             border-radius: 3px;
         }
         
+        /* Mobile responsive styles */
+        @media (max-width: 768px) {
+            /* Send panel - full width at bottom */
+            .send-panel {
+                top: auto;
+                bottom: 0;
+                left: 0;
+                right: 0;
+                width: 100%;
+                max-width: 100%;
+                border-radius: 16px 16px 0 0;
+                border-bottom: none;
+                border-left: none;
+                border-right: none;
+                box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.3);
+            }
+            
+            .send-panel.collapsed {
+                width: 100%;
+                min-width: 100%;
+                transform: translateY(calc(100% - 50px));
+            }
+            
+            .send-header {
+                padding: 14px 20px;
+                border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            }
+            
+            .send-header h2 {
+                font-size: 1rem;
+            }
+            
+            .collapse-btn {
+                font-size: 1.4rem;
+                padding: 8px 16px;
+            }
+            
+            .send-form {
+                padding: 20px;
+                max-height: 50vh;
+                overflow-y: auto;
+            }
+            
+            .recipient-select, .message-input, .send-btn {
+                font-size: 16px; /* Prevents zoom on iOS */
+                padding: 14px 16px;
+                margin-bottom: 12px;
+            }
+            
+            .message-input {
+                min-height: 80px;
+            }
+            
+            /* Messages panel - full width */
+            .messages-panel {
+                top: auto;
+                bottom: 0;
+                left: 0;
+                right: 0;
+                width: 100%;
+                max-width: 100%;
+                max-height: 70vh;
+                border-radius: 16px 16px 0 0;
+                right: -100%;
+            }
+            
+            .messages-panel.open {
+                right: 0;
+            }
+            
+            .messages-header {
+                padding: 18px 20px;
+                border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            }
+            
+            .messages-header h2 {
+                font-size: 1.1rem;
+            }
+            
+            .close-btn {
+                font-size: 1.8rem;
+                padding: 8px;
+            }
+            
+            .messages-container {
+                padding: 20px;
+            }
+            
+            .message-card {
+                padding: 16px 16px 16px 24px;
+                margin-bottom: 12px;
+            }
+            
+            .message-sender {
+                font-size: 0.9rem;
+            }
+            
+            .message-time {
+                font-size: 0.75rem;
+            }
+            
+            .message-text {
+                font-size: 0.9rem;
+            }
+            
+            /* Toggle messages button - repositioned */
+            .toggle-messages-btn {
+                top: 20px;
+                right: 20px;
+                padding: 14px 18px;
+                font-size: 1rem;
+                border-radius: 30px;
+            }
+            
+            /* Toast notification - centered */
+            .toast {
+                left: 20px;
+                right: 20px;
+                bottom: auto;
+                top: 50%;
+                transform: translateY(-50%) translateY(20px);
+                text-align: center;
+                padding: 16px 24px;
+                font-size: 1rem;
+            }
+            
+            .toast.show {
+                transform: translateY(-50%) translateY(0);
+            }
+            
+            /* House dialog - full screen on mobile */
+            .house-dialog-content {
+                width: 100%;
+                max-width: 100%;
+                max-height: 85vh;
+                border-radius: 16px 16px 0 0;
+                margin: 0;
+                position: fixed;
+                bottom: 0;
+                left: 0;
+                right: 0;
+            }
+            
+            .house-dialog-header {
+                padding: 18px 20px;
+            }
+            
+            .house-dialog-header h2 {
+                font-size: 1.1rem;
+            }
+            
+            .house-dialog-tabs {
+                padding: 0 10px;
+            }
+            
+            .tab-btn {
+                padding: 14px 10px;
+                font-size: 0.85rem;
+            }
+            
+            .house-dialog-body {
+                padding: 20px;
+                max-height: 60vh;
+            }
+            
+            .house-dialog-body .message-card {
+                padding: 16px 16px 16px 24px;
+            }
+            
+            /* Empty state */
+            .empty-state {
+                padding: 60px 20px;
+            }
+            
+            .empty-state p {
+                font-size: 1rem;
+            }
+        }
+        
+        /* Extra small screens */
+        @media (max-width: 480px) {
+            .send-panel.collapsed {
+                transform: translateY(calc(100% - 45px));
+            }
+            
+            .send-header {
+                padding: 12px 16px;
+            }
+            
+            .send-header h2 {
+                font-size: 0.9rem;
+            }
+            
+            .send-form {
+                padding: 16px;
+            }
+            
+            .recipient-select, .message-input, .send-btn {
+                font-size: 16px;
+                padding: 12px 14px;
+            }
+            
+            .toggle-messages-btn {
+                padding: 12px 16px;
+                font-size: 0.9rem;
+            }
+            
+            .messages-panel {
+                max-height: 75vh;
+            }
+            
+            .tab-btn {
+                font-size: 0.8rem;
+                padding: 12px 8px;
+            }
+        }
+        
         /* House Dialog */
         .house-dialog {
             display: none;
@@ -392,12 +609,27 @@
             bottom: 0;
             background: rgba(0, 0, 0, 0.7);
             z-index: 300;
-            align-items: center;
+            align-items: flex-end;
             justify-content: center;
         }
         
         .house-dialog.active {
             display: flex;
+        }
+        
+        /* Desktop override for house dialog */
+        @media (min-width: 769px) {
+            .house-dialog {
+                align-items: center;
+            }
+            
+            .house-dialog-content {
+                position: relative;
+                bottom: auto;
+                left: auto;
+                right: auto;
+                border-radius: 20px;
+            }
         }
         
         .house-dialog-content {
