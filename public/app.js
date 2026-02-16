@@ -4,7 +4,7 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 // State
 let config = { user: '', mailbox: '', avatar: null };
 let messages = []; // Messages TO user (for main panel)
-let allMessages = []; // All messages involving user (for house dialogs)
+let allMessages = []; // All messages involving user (for desk dialogs)
 let recipients = [];
 let avatarStates = {}; // Map of name -> {tool_name, timestamp}
 let scene, camera, renderer, controls;
@@ -12,10 +12,10 @@ let agentMeshes = new Map();
 let connectionLines = [];
 let raycaster, mouse;
 
-// Color palette for agents
+// Color palette for agents - modern muted tones
 const agentColors = [
-  0xFF6B6B, 0x4ECDC4, 0x45B7D1, 0xFFA07A, 0x98D8C8, 
-  0xF7DC6F, 0xBB8FCE, 0x85C1E2, 0xF8B500, 0x6C5CE7
+  0x5EEAD4, 0x6EE7B7, 0x7DD3FC, 0xA78BFA, 0xFBBF24,
+  0xF9A8D4, 0x86EFAC, 0x93C5FD, 0xC4B5FD, 0x67E8F9
 ];
 
 function getAgentColor(name) {
@@ -26,81 +26,107 @@ function getAgentColor(name) {
   return agentColors[Math.abs(hash) % agentColors.length];
 }
 
+// Platform dimensions
+const PLATFORM_SIZE = 60;
+const PLATFORM_HEIGHT = 2;
+const WALL_HEIGHT = 18;
+
+// Animated objects
+let holoSphere = null;
+let holoParticles = null;
+let glowLights = [];
+let floatingParticles = [];
+
 // Initialize Three.js
 function init() {
     const container = document.getElementById('canvas-container');
     
     scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x667eea);
+    scene.background = new THREE.Color(0x1a3a3a);
+    scene.fog = new THREE.FogExp2(0x1a3a3a, 0.003);
     
-    camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
-    camera.position.set(0, 30, 40);
+    camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 1000);
+    camera.position.set(55, 45, 55);
     
     renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
     renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.2;
     container.appendChild(renderer.domElement);
     
     controls = new OrbitControls(camera, renderer.domElement);
     controls.enableDamping = true;
     controls.dampingFactor = 0.05;
-    controls.maxPolarAngle = Math.PI / 2 - 0.1;
-    controls.minDistance = 20;
-    controls.maxDistance = 80;
+    controls.maxPolarAngle = Math.PI / 2 - 0.05;
+    controls.minDistance = 25;
+    controls.maxDistance = 120;
     controls.enableZoom = true;
     controls.zoomSpeed = 0.8;
-    controls.enablePan = false; // Disable pan on touch for better mobile UX
+    controls.enablePan = false;
+    controls.target.set(0, 5, 0);
     controls.touches = {
         ONE: THREE.TOUCH.ROTATE,
         TWO: THREE.TOUCH.DOLLY_PAN
     };
     
-    // Lighting
-    const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+    // === Lighting ===
+    // Soft ambient
+    const ambientLight = new THREE.AmbientLight(0x2d5a5a, 0.8);
     scene.add(ambientLight);
     
-    const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
-    dirLight.position.set(50, 100, 50);
+    // Main directional light (warm)
+    const dirLight = new THREE.DirectionalLight(0xfff5e6, 0.6);
+    dirLight.position.set(40, 80, 30);
     dirLight.castShadow = true;
-    dirLight.shadow.camera.left = -50;
-    dirLight.shadow.camera.right = 50;
-    dirLight.shadow.camera.top = 50;
-    dirLight.shadow.camera.bottom = -50;
+    dirLight.shadow.camera.left = -40;
+    dirLight.shadow.camera.right = 40;
+    dirLight.shadow.camera.top = 40;
+    dirLight.shadow.camera.bottom = -40;
     dirLight.shadow.mapSize.width = 2048;
     dirLight.shadow.mapSize.height = 2048;
+    dirLight.shadow.bias = -0.001;
     scene.add(dirLight);
     
-    // Ground
-    const groundGeo = new THREE.PlaneGeometry(200, 200);
-    const groundMat = new THREE.MeshStandardMaterial({ 
-        color: 0x7dd3c0,
-        roughness: 0.8 
-    });
-    const ground = new THREE.Mesh(groundGeo, groundMat);
-    ground.rotation.x = -Math.PI / 2;
-    ground.receiveShadow = true;
-    scene.add(ground);
+    // Fill light from below (teal tint)
+    const fillLight = new THREE.DirectionalLight(0x4fd1c5, 0.3);
+    fillLight.position.set(-20, 5, -20);
+    scene.add(fillLight);
     
-    // Grid helper
-    const grid = new THREE.GridHelper(200, 50, 0xffffff, 0xffffff);
-    grid.material.opacity = 0.2;
-    grid.material.transparent = true;
-    scene.add(grid);
+    // Hemisphere light for natural ambient
+    const hemiLight = new THREE.HemisphereLight(0x4fd1c5, 0x1a3a3a, 0.4);
+    scene.add(hemiLight);
     
-    // Trees
-    createTrees();
+    // === Platform ===
+    createPlatform();
+    
+    // === Glass Walls ===
+    createGlassWalls();
+    
+    // === Decorative Plants ===
+    createPlants();
+    
+    // === Holographic Sphere ===
+    createHolographicSphere();
+    
+    // === Ambient Glow Lights ===
+    createGlowLights();
+    
+    // === Floating Particles ===
+    createFloatingParticles();
     
     window.addEventListener('resize', onWindowResize);
     
-    // Raycaster for house clicks
+    // Raycaster for desk clicks
     raycaster = new THREE.Raycaster();
     mouse = new THREE.Vector2();
-    renderer.domElement.addEventListener('click', onHouseClick);
+    renderer.domElement.addEventListener('click', onDeskClick);
     
     // Add touch support for mobile
-    renderer.domElement.addEventListener('touchstart', onHouseTouchStart, { passive: false });
-    renderer.domElement.addEventListener('touchend', onHouseTouchEnd, { passive: false });
+    renderer.domElement.addEventListener('touchstart', onDeskTouchStart, { passive: false });
+    renderer.domElement.addEventListener('touchend', onDeskTouchEnd, { passive: false });
     
     // Disable context menu on mobile for better UX
     renderer.domElement.addEventListener('contextmenu', (e) => e.preventDefault());
@@ -113,102 +139,551 @@ function init() {
     animate();
 }
 
-function createTrees() {
-    for (let i = 0; i < 30; i++) {
-        const x = (Math.random() - 0.5) * 150;
-        const z = (Math.random() - 0.5) * 150;
-        
-        // Don't place trees too close to center
-        if (Math.sqrt(x*x + z*z) < 30) continue;
-        
-        const trunkGeo = new THREE.CylinderGeometry(0.5, 0.8, 3, 8);
-        const trunkMat = new THREE.MeshStandardMaterial({ color: 0x8B4513 });
-        const trunk = new THREE.Mesh(trunkGeo, trunkMat);
-        trunk.position.set(x, 1.5, z);
-        trunk.castShadow = true;
-        
-        const leavesGeo = new THREE.ConeGeometry(3, 8, 8);
-        const leavesMat = new THREE.MeshStandardMaterial({ color: 0x228B22 });
-        const leaves = new THREE.Mesh(leavesGeo, leavesMat);
-        leaves.position.set(x, 6, z);
-        leaves.castShadow = true;
-        
-        scene.add(trunk);
-        scene.add(leaves);
-    }
+function createPlatform() {
+    // Main platform - dark concrete slab
+    const platformGeo = new THREE.BoxGeometry(PLATFORM_SIZE, PLATFORM_HEIGHT, PLATFORM_SIZE);
+    const platformMat = new THREE.MeshStandardMaterial({
+        color: 0x3a3a3a,
+        roughness: 0.4,
+        metalness: 0.1
+    });
+    const platform = new THREE.Mesh(platformGeo, platformMat);
+    platform.position.y = PLATFORM_HEIGHT / 2;
+    platform.receiveShadow = true;
+    platform.castShadow = true;
+    scene.add(platform);
+    
+    // Edge trim - lighter accent
+    const trimGeo = new THREE.BoxGeometry(PLATFORM_SIZE + 0.5, 0.3, PLATFORM_SIZE + 0.5);
+    const trimMat = new THREE.MeshStandardMaterial({
+        color: 0x5a5a5a,
+        roughness: 0.3,
+        metalness: 0.3
+    });
+    const trim = new THREE.Mesh(trimGeo, trimMat);
+    trim.position.y = PLATFORM_HEIGHT + 0.15;
+    scene.add(trim);
+    
+    // Floor surface - polished concrete with subtle grid
+    const floorGeo = new THREE.PlaneGeometry(PLATFORM_SIZE - 2, PLATFORM_SIZE - 2);
+    const floorMat = new THREE.MeshStandardMaterial({
+        color: 0x4a4a4a,
+        roughness: 0.2,
+        metalness: 0.15
+    });
+    const floor = new THREE.Mesh(floorGeo, floorMat);
+    floor.rotation.x = -Math.PI / 2;
+    floor.position.y = PLATFORM_HEIGHT + 0.02;
+    floor.receiveShadow = true;
+    scene.add(floor);
+    
+    // Subtle grid on floor
+    const gridHelper = new THREE.GridHelper(PLATFORM_SIZE - 4, 20, 0x555555, 0x444444);
+    gridHelper.position.y = PLATFORM_HEIGHT + 0.05;
+    gridHelper.material.opacity = 0.15;
+    gridHelper.material.transparent = true;
+    scene.add(gridHelper);
+    
+    // Ground below platform (dark reflection surface)
+    const groundGeo = new THREE.PlaneGeometry(300, 300);
+    const groundMat = new THREE.MeshStandardMaterial({
+        color: 0x1a3a3a,
+        roughness: 0.6,
+        metalness: 0.2
+    });
+    const ground = new THREE.Mesh(groundGeo, groundMat);
+    ground.rotation.x = -Math.PI / 2;
+    ground.position.y = -0.1;
+    ground.receiveShadow = true;
+    scene.add(ground);
 }
 
-function createAgentHouse(name, position, toolName = null) {
+function createGlassWalls() {
+    const glassMat = new THREE.MeshPhysicalMaterial({
+        color: 0x88cccc,
+        transparent: true,
+        opacity: 0.08,
+        roughness: 0.05,
+        metalness: 0.0,
+        transmission: 0.95,
+        thickness: 0.5,
+        side: THREE.DoubleSide
+    });
+    
+    const wallHeight = WALL_HEIGHT;
+    const wallY = PLATFORM_HEIGHT + wallHeight / 2;
+    const halfSize = PLATFORM_SIZE / 2;
+    
+    // Back wall
+    const backWall = new THREE.Mesh(
+        new THREE.PlaneGeometry(PLATFORM_SIZE, wallHeight),
+        glassMat
+    );
+    backWall.position.set(0, wallY, -halfSize);
+    scene.add(backWall);
+    
+    // Left wall
+    const leftWall = new THREE.Mesh(
+        new THREE.PlaneGeometry(PLATFORM_SIZE, wallHeight),
+        glassMat
+    );
+    leftWall.position.set(-halfSize, wallY, 0);
+    leftWall.rotation.y = Math.PI / 2;
+    scene.add(leftWall);
+    
+    // Right wall (partial, for openness)
+    const rightWall = new THREE.Mesh(
+        new THREE.PlaneGeometry(PLATFORM_SIZE, wallHeight),
+        glassMat
+    );
+    rightWall.position.set(halfSize, wallY, 0);
+    rightWall.rotation.y = -Math.PI / 2;
+    scene.add(rightWall);
+    
+    // Glass edge frames (vertical pillars at corners)
+    const pillarGeo = new THREE.BoxGeometry(0.5, wallHeight, 0.5);
+    const pillarMat = new THREE.MeshStandardMaterial({
+        color: 0x777777,
+        roughness: 0.2,
+        metalness: 0.6
+    });
+    
+    const corners = [
+        [-halfSize, wallY, -halfSize],
+        [halfSize, wallY, -halfSize],
+        [-halfSize, wallY, halfSize],
+        [halfSize, wallY, halfSize]
+    ];
+    
+    corners.forEach(pos => {
+        const pillar = new THREE.Mesh(pillarGeo, pillarMat);
+        pillar.position.set(...pos);
+        pillar.castShadow = true;
+        scene.add(pillar);
+    });
+    
+    // Top edge frame
+    const topFrameMat = new THREE.MeshStandardMaterial({
+        color: 0x666666,
+        roughness: 0.2,
+        metalness: 0.5
+    });
+    
+    const frameY = PLATFORM_HEIGHT + wallHeight;
+    
+    // Back top frame
+    const backFrame = new THREE.Mesh(new THREE.BoxGeometry(PLATFORM_SIZE, 0.3, 0.3), topFrameMat);
+    backFrame.position.set(0, frameY, -halfSize);
+    scene.add(backFrame);
+    
+    // Left top frame
+    const leftFrame = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.3, PLATFORM_SIZE), topFrameMat);
+    leftFrame.position.set(-halfSize, frameY, 0);
+    scene.add(leftFrame);
+    
+    // Right top frame
+    const rightFrame = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.3, PLATFORM_SIZE), topFrameMat);
+    rightFrame.position.set(halfSize, frameY, 0);
+    scene.add(rightFrame);
+}
+
+function createPlants() {
+    const plantPositions = [
+        // Corner clusters
+        [-25, PLATFORM_HEIGHT, -25],
+        [25, PLATFORM_HEIGHT, -25],
+        [-25, PLATFORM_HEIGHT, 25],
+        [25, PLATFORM_HEIGHT, 25],
+        // Edge accents
+        [-20, PLATFORM_HEIGHT, 27],
+        [20, PLATFORM_HEIGHT, 27],
+        [-27, PLATFORM_HEIGHT, 0],
+        [27, PLATFORM_HEIGHT, -15],
+    ];
+    
+    plantPositions.forEach(pos => {
+        createPlantCluster(pos[0], pos[1], pos[2]);
+    });
+}
+
+function createPlantCluster(x, y, z) {
+    const group = new THREE.Group();
+    
+    // Planter box
+    const planterGeo = new THREE.BoxGeometry(3, 1.5, 3);
+    const planterMat = new THREE.MeshStandardMaterial({
+        color: 0x2a2a2a,
+        roughness: 0.6,
+        metalness: 0.1
+    });
+    const planter = new THREE.Mesh(planterGeo, planterMat);
+    planter.position.y = 0.75;
+    planter.castShadow = true;
+    planter.receiveShadow = true;
+    group.add(planter);
+    
+    // Soil
+    const soilGeo = new THREE.BoxGeometry(2.6, 0.2, 2.6);
+    const soilMat = new THREE.MeshStandardMaterial({ color: 0x3d2817 });
+    const soil = new THREE.Mesh(soilGeo, soilMat);
+    soil.position.y = 1.5;
+    group.add(soil);
+    
+    // Foliage - multiple spheres for bush look
+    const leafColors = [0x1a6b3a, 0x228B22, 0x2d8b4e, 0x1f7a3f];
+    
+    for (let i = 0; i < 5; i++) {
+        const size = 0.6 + Math.random() * 0.8;
+        const leafGeo = new THREE.SphereGeometry(size, 8, 8);
+        const leafMat = new THREE.MeshStandardMaterial({
+            color: leafColors[Math.floor(Math.random() * leafColors.length)],
+            roughness: 0.8
+        });
+        const leaf = new THREE.Mesh(leafGeo, leafMat);
+        leaf.position.set(
+            (Math.random() - 0.5) * 1.5,
+            1.8 + Math.random() * 1.5,
+            (Math.random() - 0.5) * 1.5
+        );
+        leaf.castShadow = true;
+        group.add(leaf);
+    }
+    
+    // Tall fern-like elements (cone shapes)
+    for (let i = 0; i < 3; i++) {
+        const fernGeo = new THREE.ConeGeometry(0.3, 2 + Math.random() * 2, 6);
+        const fernMat = new THREE.MeshStandardMaterial({
+            color: 0x1a5c2e,
+            roughness: 0.7
+        });
+        const fern = new THREE.Mesh(fernGeo, fernMat);
+        fern.position.set(
+            (Math.random() - 0.5) * 1.5,
+            2.5 + Math.random() * 1.5,
+            (Math.random() - 0.5) * 1.5
+        );
+        fern.castShadow = true;
+        group.add(fern);
+    }
+    
+    group.position.set(x, y, z);
+    scene.add(group);
+}
+
+function createHolographicSphere() {
+    // Wireframe sphere
+    const sphereGeo = new THREE.IcosahedronGeometry(6, 3);
+    const sphereMat = new THREE.MeshBasicMaterial({
+        color: 0x4fd1c5,
+        wireframe: true,
+        transparent: true,
+        opacity: 0.3
+    });
+    holoSphere = new THREE.Mesh(sphereGeo, sphereMat);
+    holoSphere.position.set(0, PLATFORM_HEIGHT + 12, 0);
+    scene.add(holoSphere);
+    
+    // Inner glow sphere
+    const innerGeo = new THREE.SphereGeometry(4, 32, 32);
+    const innerMat = new THREE.MeshBasicMaterial({
+        color: 0x4fd1c5,
+        transparent: true,
+        opacity: 0.05
+    });
+    const innerSphere = new THREE.Mesh(innerGeo, innerMat);
+    holoSphere.add(innerSphere);
+    
+    // Point cloud on sphere surface
+    const particleCount = 300;
+    const positions = new Float32Array(particleCount * 3);
+    for (let i = 0; i < particleCount; i++) {
+        const theta = Math.random() * Math.PI * 2;
+        const phi = Math.acos(2 * Math.random() - 1);
+        const r = 5.5 + Math.random() * 0.5;
+        positions[i * 3] = r * Math.sin(phi) * Math.cos(theta);
+        positions[i * 3 + 1] = r * Math.sin(phi) * Math.sin(theta);
+        positions[i * 3 + 2] = r * Math.cos(phi);
+    }
+    
+    const particleGeo = new THREE.BufferGeometry();
+    particleGeo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    const particleMat = new THREE.PointsMaterial({
+        color: 0x88ffee,
+        size: 0.15,
+        transparent: true,
+        opacity: 0.6,
+        blending: THREE.AdditiveBlending
+    });
+    holoParticles = new THREE.Points(particleGeo, particleMat);
+    holoSphere.add(holoParticles);
+    
+    // Point light from the sphere
+    const sphereLight = new THREE.PointLight(0x4fd1c5, 0.8, 35);
+    sphereLight.position.copy(holoSphere.position);
+    scene.add(sphereLight);
+}
+
+function createGlowLights() {
+    // Floor-standing lamp posts
+    const lampPositions = [
+        [20, PLATFORM_HEIGHT, 15],
+        [-20, PLATFORM_HEIGHT, 15],
+        [20, PLATFORM_HEIGHT, -20],
+        [-20, PLATFORM_HEIGHT, -20],
+    ];
+    
+    lampPositions.forEach(pos => {
+        // Lamp post
+        const postGeo = new THREE.CylinderGeometry(0.15, 0.15, 6, 8);
+        const postMat = new THREE.MeshStandardMaterial({
+            color: 0x555555,
+            roughness: 0.3,
+            metalness: 0.7
+        });
+        const post = new THREE.Mesh(postGeo, postMat);
+        post.position.set(pos[0], pos[1] + 3, pos[2]);
+        post.castShadow = true;
+        scene.add(post);
+        
+        // Lamp bulb
+        const bulbGeo = new THREE.SphereGeometry(0.4, 16, 16);
+        const bulbMat = new THREE.MeshBasicMaterial({
+            color: 0xffcc66,
+            transparent: true,
+            opacity: 0.9
+        });
+        const bulb = new THREE.Mesh(bulbGeo, bulbMat);
+        bulb.position.set(pos[0], pos[1] + 6.2, pos[2]);
+        scene.add(bulb);
+        
+        // Point light
+        const light = new THREE.PointLight(0xffcc66, 0.5, 18);
+        light.position.set(pos[0], pos[1] + 6.2, pos[2]);
+        light.castShadow = false;
+        scene.add(light);
+        glowLights.push({ bulb, light, baseIntensity: 0.5 });
+    });
+}
+
+function createFloatingParticles() {
+    const particleCount = 80;
+    const positions = new Float32Array(particleCount * 3);
+    
+    for (let i = 0; i < particleCount; i++) {
+        positions[i * 3] = (Math.random() - 0.5) * PLATFORM_SIZE;
+        positions[i * 3 + 1] = PLATFORM_HEIGHT + 2 + Math.random() * WALL_HEIGHT;
+        positions[i * 3 + 2] = (Math.random() - 0.5) * PLATFORM_SIZE;
+    }
+    
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    
+    const material = new THREE.PointsMaterial({
+        color: 0x88ffdd,
+        size: 0.12,
+        transparent: true,
+        opacity: 0.4,
+        blending: THREE.AdditiveBlending
+    });
+    
+    const particles = new THREE.Points(geometry, material);
+    scene.add(particles);
+    floatingParticles.push(particles);
+}
+
+function createAgentDesk(name, position, toolName = null) {
     const color = getAgentColor(name);
     const group = new THREE.Group();
     group.position.copy(position);
+    group.position.y = PLATFORM_HEIGHT;
     
-    // House base
-    const baseGeo = new THREE.BoxGeometry(6, 4, 6);
-    const baseMat = new THREE.MeshStandardMaterial({ color: color });
-    const base = new THREE.Mesh(baseGeo, baseMat);
-    base.position.y = 2;
-    base.castShadow = true;
-    base.receiveShadow = true;
-    group.add(base);
+    // Modern desk - white top with thin legs
+    const deskTopGeo = new THREE.BoxGeometry(5, 0.2, 3);
+    const deskMat = new THREE.MeshStandardMaterial({
+        color: 0xe8e8e8,
+        roughness: 0.3,
+        metalness: 0.1
+    });
+    const deskTop = new THREE.Mesh(deskTopGeo, deskMat);
+    deskTop.position.y = 2.5;
+    deskTop.castShadow = true;
+    deskTop.receiveShadow = true;
+    group.add(deskTop);
     
-    // Roof
-    const roofGeo = new THREE.ConeGeometry(5, 3, 4);
-    const roofMat = new THREE.MeshStandardMaterial({ color: 0x8B4513 });
-    const roof = new THREE.Mesh(roofGeo, roofMat);
-    roof.position.y = 5.5;
-    roof.rotation.y = Math.PI / 4;
-    roof.castShadow = true;
-    group.add(roof);
-    
-    // Door
-    const doorGeo = new THREE.BoxGeometry(1.5, 2.5, 0.2);
-    const doorMat = new THREE.MeshStandardMaterial({ color: 0x4a3c28 });
-    const door = new THREE.Mesh(doorGeo, doorMat);
-    door.position.set(0, 1.25, 3.1);
-    group.add(door);
-    
-    // Windows
-    const windowGeo = new THREE.BoxGeometry(1.2, 1.2, 0.2);
-    const windowMat = new THREE.MeshStandardMaterial({ 
-        color: 0xFFFF99,
-        emissive: 0xFFFF99,
-        emissiveIntensity: 0.3
+    // Desk legs - thin metal
+    const legGeo = new THREE.CylinderGeometry(0.08, 0.08, 2.4, 8);
+    const legMat = new THREE.MeshStandardMaterial({
+        color: 0x999999,
+        roughness: 0.2,
+        metalness: 0.7
+    });
+    const legPositions = [
+        [-2.2, 1.2, -1.2],
+        [2.2, 1.2, -1.2],
+        [-2.2, 1.2, 1.2],
+        [2.2, 1.2, 1.2]
+    ];
+    legPositions.forEach(pos => {
+        const leg = new THREE.Mesh(legGeo, legMat);
+        leg.position.set(...pos);
+        group.add(leg);
     });
     
-    const window1 = new THREE.Mesh(windowGeo, windowMat);
-    window1.position.set(-1.8, 2.5, 3.1);
-    group.add(window1);
+    // Modern chair - sleek
+    const chairSeatGeo = new THREE.BoxGeometry(1.8, 0.15, 1.8);
+    const chairMat = new THREE.MeshStandardMaterial({
+        color: 0x2a2a2a,
+        roughness: 0.5,
+        metalness: 0.2
+    });
+    const chairSeat = new THREE.Mesh(chairSeatGeo, chairMat);
+    chairSeat.position.set(0, 1.6, 3.2);
+    chairSeat.castShadow = true;
+    group.add(chairSeat);
     
-    const window2 = new THREE.Mesh(windowGeo, windowMat);
-    window2.position.set(1.8, 2.5, 3.1);
-    group.add(window2);
+    // Chair back - curved look (box approximation)
+    const chairBackGeo = new THREE.BoxGeometry(1.8, 2.2, 0.15);
+    const chairBack = new THREE.Mesh(chairBackGeo, chairMat);
+    chairBack.position.set(0, 2.7, 4.1);
+    chairBack.castShadow = true;
+    group.add(chairBack);
     
-    // Name label sprite (with optional tool name)
+    // Chair post
+    const chairPostGeo = new THREE.CylinderGeometry(0.1, 0.1, 1.2, 8);
+    const chairPost = new THREE.Mesh(chairPostGeo, legMat);
+    chairPost.position.set(0, 0.9, 3.2);
+    group.add(chairPost);
+    
+    // Chair base star
+    for (let i = 0; i < 5; i++) {
+        const armGeo = new THREE.CylinderGeometry(0.06, 0.06, 1.2, 6);
+        const arm = new THREE.Mesh(armGeo, legMat);
+        const angle = (i / 5) * Math.PI * 2;
+        arm.rotation.z = Math.PI / 2;
+        arm.position.set(
+            Math.cos(angle) * 0.5,
+            0.3,
+            3.2 + Math.sin(angle) * 0.5
+        );
+        arm.rotation.y = angle;
+        group.add(arm);
+    }
+    
+    // Person - Body (sitting, modern look)
+    const bodyGeo = new THREE.CylinderGeometry(0.6, 0.5, 2, 8);
+    const bodyMat = new THREE.MeshStandardMaterial({
+        color: color,
+        roughness: 0.6,
+        metalness: 0.05
+    });
+    const body = new THREE.Mesh(bodyGeo, bodyMat);
+    body.position.set(0, 2.7, 3.2);
+    body.castShadow = true;
+    group.add(body);
+    
+    // Person - Head
+    const headGeo = new THREE.SphereGeometry(0.5, 16, 16);
+    const headMat = new THREE.MeshStandardMaterial({
+        color: 0xf5d0b0,
+        roughness: 0.7
+    });
+    const head = new THREE.Mesh(headGeo, headMat);
+    head.position.set(0, 4.0, 3.2);
+    head.castShadow = true;
+    group.add(head);
+    
+    // Person - Arms on desk
+    const armObjGeo = new THREE.CylinderGeometry(0.12, 0.12, 1.8, 6);
+    const armMat = new THREE.MeshStandardMaterial({ color: color, roughness: 0.6 });
+    
+    const leftArm = new THREE.Mesh(armObjGeo, armMat);
+    leftArm.rotation.z = Math.PI / 2;
+    leftArm.rotation.y = 0.3;
+    leftArm.position.set(-0.8, 2.8, 2);
+    group.add(leftArm);
+    
+    const rightArm = new THREE.Mesh(armObjGeo, armMat);
+    rightArm.rotation.z = Math.PI / 2;
+    rightArm.rotation.y = -0.3;
+    rightArm.position.set(0.8, 2.8, 2);
+    group.add(rightArm);
+    
+    // Monitor (modern flat screen)
+    const monitorStandGeo = new THREE.CylinderGeometry(0.5, 0.6, 0.1, 16);
+    const monitorMat = new THREE.MeshStandardMaterial({
+        color: 0x333333,
+        roughness: 0.3,
+        metalness: 0.5
+    });
+    const monitorStand = new THREE.Mesh(monitorStandGeo, monitorMat);
+    monitorStand.position.set(0, 2.65, 0.8);
+    group.add(monitorStand);
+    
+    const monitorNeckGeo = new THREE.CylinderGeometry(0.08, 0.08, 1.2, 8);
+    const monitorNeck = new THREE.Mesh(monitorNeckGeo, monitorMat);
+    monitorNeck.position.set(0, 3.2, 0.8);
+    group.add(monitorNeck);
+    
+    // Screen
+    const screenFrameGeo = new THREE.BoxGeometry(3, 1.8, 0.12);
+    const screenFrame = new THREE.Mesh(screenFrameGeo, monitorMat);
+    screenFrame.position.set(0, 4.0, 0.8);
+    screenFrame.castShadow = true;
+    group.add(screenFrame);
+    
+    // Screen display (glowing)
+    const screenDisplayGeo = new THREE.PlaneGeometry(2.7, 1.5);
+    const screenDisplayMat = new THREE.MeshBasicMaterial({
+        color: 0x2a6b5e,
+    });
+    const screenDisplay = new THREE.Mesh(screenDisplayGeo, screenDisplayMat);
+    screenDisplay.position.set(0, 4.0, 0.87);
+    group.add(screenDisplay);
+    
+    // Screen glow light
+    const screenLight = new THREE.PointLight(0x4fd1c5, 0.3, 6);
+    screenLight.position.set(0, 4.0, 1.5);
+    group.add(screenLight);
+    
+    // Keyboard
+    const kbGeo = new THREE.BoxGeometry(1.6, 0.05, 0.5);
+    const kbMat = new THREE.MeshStandardMaterial({
+        color: 0x444444,
+        roughness: 0.5,
+        metalness: 0.3
+    });
+    const keyboard = new THREE.Mesh(kbGeo, kbMat);
+    keyboard.position.set(0, 2.63, 2);
+    group.add(keyboard);
+    
+    // Name label sprite
     const canvas = document.createElement('canvas');
     const context = canvas.getContext('2d');
-    // High DPI canvas for crisp text
     const scale = 2;
     canvas.width = 512;
-    canvas.height = toolName ? 160 : 128; // Taller if showing tool
+    canvas.height = toolName ? 160 : 128;
     context.scale(scale, scale);
     
-    // Background
-    context.fillStyle = 'rgba(0, 0, 0, 0.7)';
+    // Frosted glass background
+    context.fillStyle = 'rgba(20, 60, 60, 0.85)';
     context.roundRect(0, 0, 256, toolName ? 80 : 64, 16);
     context.fill();
     
-    // Name text
-    context.font = 'bold 24px Arial';
-    context.fillStyle = 'white';
+    // Subtle border
+    context.strokeStyle = 'rgba(79, 209, 197, 0.4)';
+    context.lineWidth = 1;
+    context.roundRect(0, 0, 256, toolName ? 80 : 64, 16);
+    context.stroke();
+    
+    context.font = 'bold 22px Arial';
+    context.fillStyle = '#e0f5f0';
     context.textAlign = 'center';
     context.textBaseline = 'middle';
     context.fillText(name, 128, 24);
     
-    // Tool name text (if available)
     if (toolName) {
-        context.font = 'italic 16px Arial';
-        context.fillStyle = '#FFD700'; // Gold color for tool name
+        context.font = 'italic 14px Arial';
+        context.fillStyle = '#4fd1c5';
         context.fillText(toolName, 128, 56);
     }
     
@@ -217,18 +692,10 @@ function createAgentHouse(name, position, toolName = null) {
     texture.magFilter = THREE.LinearFilter;
     const spriteMat = new THREE.SpriteMaterial({ map: texture });
     const sprite = new THREE.Sprite(spriteMat);
-    sprite.position.set(0, toolName ? 8.5 : 8, 0);
-    sprite.scale.set(8, toolName ? 2.5 : 2, 1);
-    sprite.name = 'label'; // Tag for easy updates
+    sprite.position.set(0, 6.5, 2);
+    sprite.scale.set(7, toolName ? 2.2 : 1.8, 1);
+    sprite.name = 'label';
     group.add(sprite);
-    
-    // Path to house
-    const pathGeo = new THREE.PlaneGeometry(2, 8);
-    const pathMat = new THREE.MeshStandardMaterial({ color: 0xD2B48C });
-    const path = new THREE.Mesh(pathGeo, pathMat);
-    path.rotation.x = -Math.PI / 2;
-    path.position.set(0, 0.02, 7);
-    group.add(path);
     
     scene.add(group);
     agentMeshes.set(name, group);
@@ -236,11 +703,10 @@ function createAgentHouse(name, position, toolName = null) {
     return group;
 }
 
-function updateHouseLabel(house, name, toolName = null) {
-    const sprite = house.getObjectByName('label');
+function updateDeskLabel(desk, name, toolName = null) {
+    const sprite = desk.getObjectByName('label');
     if (!sprite) return;
     
-    // Create new canvas with updated text
     const canvas = document.createElement('canvas');
     const context = canvas.getContext('2d');
     const scale = 2;
@@ -248,67 +714,73 @@ function updateHouseLabel(house, name, toolName = null) {
     canvas.height = toolName ? 160 : 128;
     context.scale(scale, scale);
     
-    // Background
-    context.fillStyle = 'rgba(0, 0, 0, 0.7)';
+    context.fillStyle = 'rgba(20, 60, 60, 0.85)';
     context.roundRect(0, 0, 256, toolName ? 80 : 64, 16);
     context.fill();
     
-    // Name text
-    context.font = 'bold 24px Arial';
-    context.fillStyle = 'white';
+    context.strokeStyle = 'rgba(79, 209, 197, 0.4)';
+    context.lineWidth = 1;
+    context.roundRect(0, 0, 256, toolName ? 80 : 64, 16);
+    context.stroke();
+    
+    context.font = 'bold 22px Arial';
+    context.fillStyle = '#e0f5f0';
     context.textAlign = 'center';
     context.textBaseline = 'middle';
     context.fillText(name, 128, 24);
     
-    // Tool name text (if available)
     if (toolName) {
-        context.font = 'italic 16px Arial';
-        context.fillStyle = '#FFD700';
+        context.font = 'italic 14px Arial';
+        context.fillStyle = '#4fd1c5';
         context.fillText(toolName, 128, 56);
     }
     
-    // Update texture
     const texture = new THREE.CanvasTexture(canvas);
     texture.minFilter = THREE.LinearFilter;
     texture.magFilter = THREE.LinearFilter;
     sprite.material.map = texture;
     sprite.material.needsUpdate = true;
     
-    // Update position and scale
-    sprite.position.set(0, toolName ? 8.5 : 8, 0);
-    sprite.scale.set(8, toolName ? 2.5 : 2, 1);
+    sprite.position.set(0, 6.5, 2);
+    sprite.scale.set(7, toolName ? 2.2 : 1.8, 1);
 }
 
 function createMessageParticle(fromPos, toPos) {
-    const particleGeo = new THREE.SphereGeometry(0.3, 8, 8);
-    const particleMat = new THREE.MeshStandardMaterial({ 
-        color: 0xFFD700,
-        emissive: 0xFFD700,
-        emissiveIntensity: 0.5
+    const particleGeo = new THREE.SphereGeometry(0.35, 12, 12);
+    const particleMat = new THREE.MeshBasicMaterial({ 
+        color: 0xff6b6b,
+        transparent: true,
+        opacity: 0.95
     });
     const particle = new THREE.Mesh(particleGeo, particleMat);
     
     particle.position.copy(fromPos);
-    particle.position.y += 8;
+    particle.position.y += 5;
+    
+    // Add a glow point light that follows particle
+    const glow = new THREE.PointLight(0xff6b6b, 1.0, 10);
+    particle.add(glow);
     
     scene.add(particle);
     
-    // Animate particle
     const startTime = Date.now();
-    const duration = 2000;
+    const duration = 1500;
     
     function animateParticle() {
         const elapsed = Date.now() - startTime;
         const progress = Math.min(elapsed / duration, 1);
         
         particle.position.lerpVectors(
-            new THREE.Vector3(fromPos.x, fromPos.y + 8, fromPos.z),
-            new THREE.Vector3(toPos.x, toPos.y + 8, toPos.z),
+            new THREE.Vector3(fromPos.x, fromPos.y + 5, fromPos.z),
+            new THREE.Vector3(toPos.x, toPos.y + 5, toPos.z),
             progress
         );
         
-        // Add arc
-        particle.position.y += Math.sin(progress * Math.PI) * 3;
+        particle.position.y += Math.sin(progress * Math.PI) * 2;
+        
+        // Pulse size
+        const pulse = Math.sin(progress * Math.PI) * 0.2 + 1;
+        particle.scale.setScalar(pulse);
         
         if (progress < 1) {
             requestAnimationFrame(animateParticle);
@@ -324,14 +796,20 @@ function createConnectionLine(fromPos, toPos) {
     const startPos = new THREE.Vector3(fromPos.x, fromPos.y + 5, fromPos.z);
     const endPos = new THREE.Vector3(toPos.x, toPos.y + 5, toPos.z);
     
+    // Create curved line with points
+    const mid = new THREE.Vector3().addVectors(startPos, endPos).multiplyScalar(0.5);
+    mid.y += 2;
+    
+    const curve = new THREE.QuadraticBezierCurve3(startPos, mid, endPos);
+    const points = curve.getPoints(50);
+    
+    // Main line - thicker, glowing red
     const material = new THREE.LineBasicMaterial({
         color: 0xff6b6b,
-        opacity: 0.8,
+        opacity: 0.7,
         transparent: true,
         linewidth: 3
     });
-    
-    const points = [startPos, endPos];
     
     const geometry = new THREE.BufferGeometry().setFromPoints(points);
     const line = new THREE.Line(geometry, material);
@@ -339,33 +817,37 @@ function createConnectionLine(fromPos, toPos) {
     scene.add(line);
     connectionLines.push(line);
     
-    // Add arrowhead for directionality
+    // Add small chevron markers along the path to show direction
     const direction = new THREE.Vector3().subVectors(endPos, startPos).normalize();
-    const arrowPos = endPos.clone().sub(direction.clone().multiplyScalar(5));
-    
-    const arrowGeometry = new THREE.ConeGeometry(0.5, 1.5, 8);
-    const arrowMaterial = new THREE.MeshStandardMaterial({
-        color: 0xff6b6b,
-        emissive: 0xff6b6b,
-        emissiveIntensity: 0.3
-    });
-    const arrowhead = new THREE.Mesh(arrowGeometry, arrowMaterial);
-    
-    arrowhead.position.copy(arrowPos);
-    
-    // Orient arrow to point along the line
     const up = new THREE.Vector3(0, 1, 0);
-    const quaternion = new THREE.Quaternion();
-    quaternion.setFromUnitVectors(up, direction);
-    arrowhead.setRotationFromQuaternion(quaternion);
+    const numMarkers = 4;
+    for (let i = 0; i < numMarkers; i++) {
+        const t = (i + 1) / (numMarkers + 1);
+        const markerPos = curve.getPoint(t);
+        
+        const markerGeo = new THREE.ConeGeometry(0.25, 0.7, 8);
+        const markerMat = new THREE.MeshBasicMaterial({
+            color: 0xff6b6b,
+            transparent: true,
+            opacity: 0.5
+        });
+        const marker = new THREE.Mesh(markerGeo, markerMat);
+        
+        // Get tangent at this point for direction
+        const tangent = curve.getTangent(t);
+        marker.position.copy(markerPos);
+        
+        const markerQuat = new THREE.Quaternion();
+        markerQuat.setFromUnitVectors(up, tangent);
+        marker.setRotationFromQuaternion(markerQuat);
+        
+        scene.add(marker);
+        connectionLines.push(marker);
+    }
     
-    scene.add(arrowhead);
-    connectionLines.push(arrowhead);
-    
-    // Send particle
     setTimeout(() => {
         createMessageParticle(fromPos, toPos);
-    }, 100);
+    }, 50);
 }
 
 function clearConnections() {
@@ -377,49 +859,47 @@ function updateVillage() {
     clearConnections();
     
     // Use recipients (from coworkers.db) as the authoritative list of agents
-    // This ensures we only show houses for registered coworkers
     const allAgents = new Set([config.user.toLowerCase(), ...recipients.map(r => r.toLowerCase())]);
     
-    // Also add message participants that might not be in coworker db yet
+    // Also add message participants
     messages.forEach(m => {
         allAgents.add(m.sender.toLowerCase());
         allAgents.add(m.recipient.toLowerCase());
     });
     
-    // Arrange agents in a circle
+    // Arrange agents in a circle on the platform
     const agents = Array.from(allAgents);
-    const radius = 25;
+    const radius = Math.min(20, Math.max(10, agents.length * 3));
     
     agents.forEach((agent, index) => {
-        const angle = (index / agents.length) * Math.PI * 2;
+        const angle = (index / agents.length) * Math.PI * 2 - Math.PI / 2;
         const x = Math.cos(angle) * radius;
         const z = Math.sin(angle) * radius;
         const position = new THREE.Vector3(x, 0, z);
         
-        // Get tool name for this agent from avatar states
         const avatarState = avatarStates[agent.toLowerCase()];
         const toolName = avatarState?.tool_name || null;
         
         if (!agentMeshes.has(agent)) {
-            createAgentHouse(agent, position, toolName);
+            const group = createAgentDesk(agent, position, toolName);
+            // Face desk toward center
+            group.lookAt(new THREE.Vector3(0, PLATFORM_HEIGHT, 0));
         } else {
-            // Update position if needed
-            const house = agentMeshes.get(agent);
-            house.position.copy(position);
-            
-            // Update label with current tool name
-            updateHouseLabel(house, agent, toolName);
+            const desk = agentMeshes.get(agent);
+            desk.position.set(x, PLATFORM_HEIGHT, z);
+            desk.lookAt(new THREE.Vector3(0, PLATFORM_HEIGHT, 0));
+            updateDeskLabel(desk, agent, toolName);
         }
     });
     
-    // Remove houses for coworkers that no longer exist
-    agentMeshes.forEach((house, name) => {
+    // Remove desks for coworkers that no longer exist
+    agentMeshes.forEach((desk, name) => {
         if (!allAgents.has(name)) {
             // Remove from scene
-            scene.remove(house);
+            scene.remove(desk);
             
             // Dispose of geometries and materials to prevent memory leaks
-            house.traverse((child) => {
+            desk.traverse((child) => {
                 if (child.isMesh) {
                     child.geometry.dispose();
                     if (child.material) {
@@ -439,23 +919,47 @@ function updateVillage() {
     
     // Create connections for unread messages only
     allMessages.forEach(msg => {
-        const fromHouse = agentMeshes.get(msg.sender.toLowerCase());
-        const toHouse = agentMeshes.get(msg.recipient.toLowerCase());
+        const fromDesk = agentMeshes.get(msg.sender.toLowerCase());
+        const toDesk = agentMeshes.get(msg.recipient.toLowerCase());
         
-        if (fromHouse && toHouse && !msg.read) {
+        if (fromDesk && toDesk && !msg.read) {
             createConnectionLine(
-                fromHouse.position,
-                toHouse.position
+                fromDesk.position,
+                toDesk.position
             );
         }
     });
     
-    // Update house labels with unread indicators
-    updateHouseLabels();
+    // Update desk labels with unread indicators
+    updateDeskLabels();
 }
 
 function animate() {
     requestAnimationFrame(animate);
+    
+    const time = Date.now() * 0.001;
+    
+    // Rotate holographic sphere
+    if (holoSphere) {
+        holoSphere.rotation.y = time * 0.15;
+        holoSphere.rotation.x = Math.sin(time * 0.1) * 0.1;
+    }
+    
+    // Animate floating particles
+    floatingParticles.forEach(particles => {
+        const positions = particles.geometry.attributes.position.array;
+        for (let i = 0; i < positions.length; i += 3) {
+            positions[i + 1] += Math.sin(time + positions[i] * 0.1) * 0.003;
+        }
+        particles.geometry.attributes.position.needsUpdate = true;
+    });
+    
+    // Subtle glow pulse on lamps
+    glowLights.forEach((item, i) => {
+        const pulse = Math.sin(time * 1.5 + i) * 0.15 + 1;
+        item.light.intensity = item.baseIntensity * pulse;
+    });
+    
     controls.update();
     renderer.render(scene, camera);
 }
@@ -467,14 +971,12 @@ function onWindowResize() {
     camera.updateProjectionMatrix();
     renderer.setSize(width, height);
     
-    // Adjust camera position for better mobile view
     if (width < 768) {
-        // On mobile, position camera slightly higher and further back
-        camera.position.y = Math.max(camera.position.y, 35);
-        camera.position.z = Math.max(camera.position.z, 45);
-        controls.minDistance = 30; // Prevent zooming too close on mobile
+        camera.position.y = Math.max(camera.position.y, 40);
+        camera.position.z = Math.max(camera.position.z, 50);
+        controls.minDistance = 35;
     } else {
-        controls.minDistance = 20;
+        controls.minDistance = 25;
     }
 }
 
@@ -609,9 +1111,9 @@ function updateUI() {
         });
     }
     
-    // Update house dialog if it's open
+    // Update desk dialog if it's open
     if (document.getElementById('house-dialog').classList.contains('active')) {
-        updateHouseDialogContent();
+        updateDeskDialogContent();
     }
 }
 
@@ -672,23 +1174,23 @@ async function sendMessage() {
     }
 }
 
-// House click handler
-function onHouseClick(event) {
-    handleHouseInteraction(event.clientX, event.clientY);
+// Desk click handler
+function onDeskClick(event) {
+    handleDeskInteraction(event.clientX, event.clientY);
 }
 
 // Touch handlers for mobile
 let touchStartX = 0;
 let touchStartY = 0;
 
-function onHouseTouchStart(event) {
+function onDeskTouchStart(event) {
     if (event.touches.length === 1) {
         touchStartX = event.touches[0].clientX;
         touchStartY = event.touches[0].clientY;
     }
 }
 
-function onHouseTouchEnd(event) {
+function onDeskTouchEnd(event) {
     if (event.changedTouches.length === 1) {
         const touchEndX = event.changedTouches[0].clientX;
         const touchEndY = event.changedTouches[0].clientY;
@@ -701,13 +1203,13 @@ function onHouseTouchEnd(event) {
         
         // Only trigger if touch didn't move much (tap vs swipe)
         if (moveDistance < 20) {
-            handleHouseInteraction(touchEndX, touchEndY);
+            handleDeskInteraction(touchEndX, touchEndY);
         }
     }
 }
 
-// Common house interaction handler
-function handleHouseInteraction(clientX, clientY) {
+// Common desk interaction handler
+function handleDeskInteraction(clientX, clientY) {
     // Calculate normalized device coordinates
     const rect = renderer.domElement.getBoundingClientRect();
     const x = ((clientX - rect.left) / rect.width) * 2 - 1;
@@ -718,34 +1220,34 @@ function handleHouseInteraction(clientX, clientY) {
     
     raycaster.setFromCamera(mouse, camera);
     
-    // Get all house meshes
-    const houseMeshes = [];
+    // Get all desk meshes
+    const deskMeshes = [];
     agentMeshes.forEach((group, name) => {
         group.children.forEach(child => {
             if (child.isMesh && !child.userData.isBubble && !child.userData.isCup) {
                 child.userData.agentName = name;
-                houseMeshes.push(child);
+                deskMeshes.push(child);
             }
         });
     });
     
-    const intersects = raycaster.intersectObjects(houseMeshes);
+    const intersects = raycaster.intersectObjects(deskMeshes);
     
     if (intersects.length > 0) {
         const agentName = intersects[0].object.userData.agentName;
         if (agentName) {
-            showHouseDialog(agentName);
+            showDeskDialog(agentName);
         }
     }
 }
 
-// Global variable to track current agent for house dialog
-let currentHouseAgent = null;
+// Global variable to track current agent for desk dialog
+let currentDeskAgent = null;
 let currentTab = 'received';
 
 // Show dialog with messages for a specific agent
-async function showHouseDialog(agentName) {
-    currentHouseAgent = agentName.toLowerCase();
+async function showDeskDialog(agentName) {
+    currentDeskAgent = agentName.toLowerCase();
     currentTab = 'received'; // Default to received tab
     
     const dialog = document.getElementById('house-dialog');
@@ -785,35 +1287,35 @@ window.switchTab = function(tab) {
     document.getElementById('tab-sent').classList.toggle('active', tab === 'sent');
     
     // Update content
-    updateHouseDialogContent();
+    updateDeskDialogContent();
 };
 
-function updateHouseDialogContent() {
+function updateDeskDialogContent() {
     const content = document.getElementById('house-dialog-content');
     
-    if (!currentHouseAgent) return;
+    if (!currentDeskAgent) return;
     
     // Filter messages based on current tab - FROM THE AGENT'S PERSPECTIVE
     let filteredMessages;
     if (currentTab === 'received') {
         // Messages RECEIVED BY the agent (sent TO the agent)
         filteredMessages = allMessages.filter(m => 
-            m.recipient.toLowerCase() === currentHouseAgent
+            m.recipient.toLowerCase() === currentDeskAgent
         );
     } else {
         // Messages SENT BY the agent
         filteredMessages = allMessages.filter(m => 
-            m.sender.toLowerCase() === currentHouseAgent
+            m.sender.toLowerCase() === currentDeskAgent
         );
     }
     
     // Update count badges
     const receivedCount = allMessages.filter(m => 
-        m.recipient.toLowerCase() === currentHouseAgent
+        m.recipient.toLowerCase() === currentDeskAgent
     ).length;
     
     const sentCount = allMessages.filter(m => 
-        m.sender.toLowerCase() === currentHouseAgent
+        m.sender.toLowerCase() === currentDeskAgent
     ).length;
     
     const receivedBadge = document.getElementById('received-count');
@@ -843,35 +1345,30 @@ function updateHouseDialogContent() {
     }
 }
 
-window.closeHouseDialog = function() {
+window.closeDeskDialog = function() {
     document.getElementById('house-dialog').classList.remove('active');
 };
 
-// Update house labels to show unread indicators and tool names
-function updateHouseLabels() {
+// Update desk labels to show unread indicators and tool names
+function updateDeskLabels() {
     agentMeshes.forEach((group, name) => {
-        // Check for unread messages SENT TO this agent (messages they haven't read)
         const unreadCount = allMessages.filter(m => 
             m.recipient.toLowerCase() === name.toLowerCase() && 
             m.sender.toLowerCase() === config.user.toLowerCase() &&
             !m.read
         ).length;
         
-        // Also check if this agent has sent unread messages TO user
         const unreadFromAgent = allMessages.filter(m => 
             m.sender.toLowerCase() === name.toLowerCase() && 
             m.recipient.toLowerCase() === config.user.toLowerCase() &&
             !m.read
         ).length;
         
-        // Get tool name for this agent
         const avatarState = avatarStates[name.toLowerCase()];
         const toolName = avatarState?.tool_name || null;
         
-        // Find the sprite label
         const sprite = group.children.find(c => c.isSprite);
         if (sprite) {
-            // Update the canvas texture - high DPI for crisp text
             const canvas = document.createElement('canvas');
             const context = canvas.getContext('2d');
             const scale = 2;
@@ -879,40 +1376,43 @@ function updateHouseLabels() {
             canvas.height = toolName ? 160 : 128;
             context.scale(scale, scale);
             
-            // Background - change color if there are unread messages
+            // Background - themed colors for state
             if (unreadFromAgent > 0) {
-                // Red background for unread messages from agent
-                context.fillStyle = 'rgba(220, 53, 69, 0.9)';
+                context.fillStyle = 'rgba(220, 80, 80, 0.85)';
             } else if (unreadCount > 0) {
-                // Blue background for messages sent but not read
-                context.fillStyle = 'rgba(0, 123, 255, 0.9)';
+                context.fillStyle = 'rgba(59, 130, 180, 0.85)';
             } else {
-                // Default black background
-                context.fillStyle = 'rgba(0, 0, 0, 0.7)';
+                context.fillStyle = 'rgba(20, 60, 60, 0.85)';
             }
             context.roundRect(0, 0, 350, toolName ? 80 : 64, 16);
             context.fill();
             
-            // Name
-            context.font = 'bold 24px Arial';
-            context.fillStyle = 'white';
+            // Border
+            context.strokeStyle = unreadFromAgent > 0 
+                ? 'rgba(255, 120, 120, 0.6)' 
+                : unreadCount > 0 
+                    ? 'rgba(100, 180, 255, 0.6)' 
+                    : 'rgba(79, 209, 197, 0.3)';
+            context.lineWidth = 1;
+            context.roundRect(0, 0, 350, toolName ? 80 : 64, 16);
+            context.stroke();
+            
+            context.font = 'bold 22px Arial';
+            context.fillStyle = '#e0f5f0';
             context.textAlign = 'center';
             context.textBaseline = 'middle';
             
             if (unreadFromAgent > 0) {
-                // Show name with unread indicator from agent
-                context.fillText(`${name} 🔴 ${unreadFromAgent}`, 175, 24);
+                context.fillText(`${name}  ${unreadFromAgent}`, 175, 24);
             } else if (unreadCount > 0) {
-                // Show name with sent-but-unread count
-                context.fillText(`${name} 📤 ${unreadCount}`, 175, 24);
+                context.fillText(`${name}  ${unreadCount}`, 175, 24);
             } else {
                 context.fillText(name, 175, 24);
             }
             
-            // Tool name text (if available)
             if (toolName) {
-                context.font = 'italic 16px Arial';
-                context.fillStyle = '#FFD700'; // Gold color for tool name
+                context.font = 'italic 14px Arial';
+                context.fillStyle = '#4fd1c5';
                 context.fillText(toolName, 175, 56);
             }
             
@@ -922,9 +1422,8 @@ function updateHouseLabels() {
             sprite.material.map = texture;
             sprite.material.needsUpdate = true;
             
-            // Update position and scale based on whether tool name is shown
-            sprite.position.set(0, toolName ? 8.5 : 8, 0);
-            sprite.scale.set(8, toolName ? 2.5 : 2, 1);
+            sprite.position.set(0, 6.5, 2);
+            sprite.scale.set(7, toolName ? 2.2 : 1.8, 1);
         }
     });
 }

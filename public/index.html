@@ -538,7 +538,7 @@
                 transform: translateY(-50%) translateY(0);
             }
             
-            /* House dialog - full screen on mobile */
+            /* Desk dialog - full screen on mobile */
             .house-dialog-content {
                 width: 100%;
                 max-width: 100%;
@@ -632,7 +632,7 @@
             }
         }
         
-        /* House Dialog */
+        /* Desk Dialog */
         .house-dialog {
             display: none;
             position: fixed;
@@ -650,7 +650,7 @@
             display: flex;
         }
         
-        /* Desktop override for house dialog */
+        /* Desktop override for desk dialog */
         @media (min-width: 769px) {
             .house-dialog {
                 align-items: center;
@@ -665,7 +665,7 @@
             }
         }
         
-        /* Desktop house dialog styles */
+        /* Desktop desk dialog styles */
         @media (min-width: 769px) {
             .house-dialog-content {
                 background: rgba(255, 255, 255, 0.15);
@@ -681,7 +681,7 @@
             }
         }
         
-        /* Base house dialog styles (shared) */
+        /* Base desk dialog styles (shared) */
         .house-dialog-content {
             background: rgba(255, 255, 255, 0.15);
             backdrop-filter: blur(20px);
@@ -820,12 +820,12 @@
         </div>
     </div>
     
-    <!-- House Dialog - Shows messages with specific agent -->
+    <!-- Desk Dialog - Shows messages with specific agent -->
     <div class="house-dialog" id="house-dialog">
         <div class="house-dialog-content">
             <div class="house-dialog-header">
                 <h2 id="house-dialog-title">Messages</h2>
-                <button class="close-btn" onclick="closeHouseDialog()">×</button>
+                <button class="close-btn" onclick="closeDeskDialog()">×</button>
             </div>
             <div class="house-dialog-tabs">
                 <button class="tab-btn active" id="tab-received" onclick="switchTab('received')">
