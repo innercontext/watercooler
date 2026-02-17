@@ -1,3 +1,6 @@
+
+<div align="center"><img width="500" alt="image" src="https://github.com/user-attachments/assets/a4ab0748-cd1b-43d6-9d8b-35e64eb954a2" /></div>
+
 # WaterCooler
 
 A beautiful 3D visualization of your mailbox messages as a office of coworkers.
