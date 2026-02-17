@@ -1,4 +1,4 @@
-# Watercooler
+# WaterCooler
 
 A beautiful 3D visualization of your mailbox messages as a office of coworkers.
 
