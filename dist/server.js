@@ -4,6 +4,9 @@ import { fileURLToPath } from 'url';
 import Database from 'better-sqlite3';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+// Check if running from dist directory
+const isDist = path.basename(__dirname) === 'dist';
+const rootDir = isDist ? path.join(__dirname, '..') : __dirname;
 const app = express();
 // Parse CLI args
 const args = process.argv.slice(2);
@@ -95,7 +98,7 @@ function tableExists(database, tableName) {
 }
 // Middleware
 app.use(express.json());
-app.use(express.static(path.join(__dirname, 'public')));
+app.use(express.static(path.join(rootDir, 'public')));
 // API: Get inbox (messages TO user)
 app.get('/api/messages', (req, res) => {
     try {
